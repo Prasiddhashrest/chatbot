@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Chatbot</title>
+  <style>
+    :root {
+      --bg: #0f172a; /* slate-900 */
+      --panel: #111827; /* gray-900 */
+      --muted: #94a3b8; /* slate-400 */
+      --text: #e5e7eb; /* gray-200 */
+      --accent: #38bdf8; /* sky-400 */
+      --me: #22c55e; /* green-500 */
+      --bot: #3b82f6; /* blue-500 */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 80% -10%, #1e293b, var(--bg));
+      color: var(--text);
+      display: grid; place-items: center; height: 100vh; padding: 12px;
+    }
+    .app {
+      width: min(900px, 100%); height: min(700px, 92vh);
+      background: rgba(17,24,39,0.7); backdrop-filter: blur(6px);
+      border: 1px solid #334155; border-radius: 18px; overflow: hidden;
+      display: grid; grid-template-rows: auto 1fr auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    header { padding: 14px 16px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 10px; }
+    header .dot { width: 10px; height: 10px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+    header h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+    header p { margin: 0; color: var(--muted); font-size: 12px; }
+
+    #log { padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .msg { max-width: 70ch; width: fit-content; padding: 10px 12px; border-radius: 14px; line-height: 1.35; }
+    .me { align-self: flex-end; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.35); }
+    .bot { align-self: flex-start; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.35); }
+    .time { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    form { display: flex; gap: 8px; padding: 14px; border-top: 1px solid #334155; background: linear-gradient(0deg, rgba(2,6,23,0.9), rgba(2,6,23,0.4)); }
+    input[type="text"] { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid #334155; background: #0b1220; color: var(--text); outline: none; }
+    button { padding: 12px 16px; border-radius: 12px; border: 1px solid #334155; background: #0b1220; color: var(--text); cursor: pointer; }
+    button:hover { border-color: #475569; }
+    .tips { padding: 10px 16px; color: var(--muted); font-size: 12px; border-top: 1px dashed #334155; }
+    a.tip { color: var(--accent); cursor: pointer; text-decoration: none; }
+    a.tip:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="app" role="application">
+    <header>
+      <div class="dot" aria-hidden="true"></div>
+      <div>
+        <h1>Simple Chatbot</h1>
+        <p>Type a message—try: "help", "time", "joke", "weather in Chicago"</p>
+      </div>
+    </header>
+
+    <div id="log" aria-live="polite" aria-atomic="false"></div>
+
+    <div class="tips">Quick prompts: <a class="tip" data-q="help">help</a> · <a class="tip" data-q="time">time</a> · <a class="tip" data-q="tell me a joke">tell me a joke</a> · <a class="tip" data-q="weather in Kathmandu">weather in Kathmandu</a></div>
+
+    <form id="chat" autocomplete="off">
+      <input id="input" type="text" placeholder="Message… (press Enter)" aria-label="Your message" />
+      <button type="submit" aria-label="Send">Send</button>
+    </form>
+  </div>
+
+<script>
+(function() {
+  const logEl = document.getElementById('log');
+  const form = document.getElementById('chat');
+  const input = document.getElementById('input');
+
+  // --- Persistence ---
+  const KEY = 'simple-chatbot-history-v1';
+  const history = JSON.parse(localStorage.getItem(KEY) || '[]');
+  history.forEach(addMessageEl);
+  if (history.length === 0) greet();
+  scrollToBottom();
+
+  // --- Event handlers ---
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    const me = makeMessage('me', text);
+    saveAndRender(me);
+    input.value = '';
+    // Simulate thinking
+    setTimeout(() => {
+      const reply = respond(text);
+      const bot = makeMessage('bot', reply);
+      saveAndRender(bot);
+    }, 300);
+  });
+
+  document.querySelectorAll('a.tip').forEach(a => {
+    a.addEventListener('click', () => {
+      input.value = a.dataset.q;
+      input.focus();
+    });
+  });
+
+  // --- Helpers ---
+  function greet() {
+    const lines = [
+      "Hey! I'm your tiny on-page chatbot.",
+      'Type "help" to see what I can do.'
+    ];
+    lines.forEach((t,i)=> setTimeout(()=> saveAndRender(makeMessage('bot', t)), 200*i));
+  }
+
+  function makeMessage(who, text) {
+    return { who, text, ts: Date.now() };
+  }
+
+  function saveAndRender(msg) {
+    const arr = JSON.parse(localStorage.getItem(KEY) || '[]');
+    arr.push(msg);
+    localStorage.setItem(KEY, JSON.stringify(arr));
+    addMessageEl(msg);
+    scrollToBottom();
+  }
+
+  function addMessageEl({ who, text, ts }) {
+    const wrap = document.createElement('div');
+    wrap.className = 'wrap';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg ' + (who === 'me' ? 'me' : 'bot');
+    bubble.textContent = text;
+    const t = document.createElement('div');
+    t.className = 'time';
+    t.textContent = new Date(ts).toLocaleString();
+    wrap.appendChild(bubble);
+    wrap.appendChild(t);
+    logEl.appendChild(wrap);
+  }
+
+  function scrollToBottom() { logEl.scrollTop = logEl.scrollHeight; }
+
+  // --- Very simple rule-based NLU ---
+  function respond(raw) {
+    const text = raw.toLowerCase();
+
+    // small intent helpers
+    const includes = (...arr) => arr.every(x => text.includes(x));
+    const any = (...arr) => arr.some(x => text.includes(x));
+
+    // greetings
+    if (any('hello','hi','hey','yo','sup')) {
+      return one([
+        'Hey! What can I help with?',
+        'Hello there! Type "help" for ideas.',
+        'Yo! Ask me about time, a joke, or weather.'
+      ]);
+    }
+
+    // help menu
+    if (text === 'help' || includes('what','can','you','do')) {
+      return [
+        'I can do a few basics:',
+        '• time – current local time',
+        '• joke – a tiny joke',
+        '• weather in <city> – (demo) a canned weather line',
+        '• clear – wipe chat history',
+        '• echo <text> – repeat back what you say'
+      ].join('\n');
+    }
+
+    // clear history
+    if (text === 'clear' || includes('wipe','history')) {
+      localStorage.setItem(KEY, '[]');
+      logEl.innerHTML = '';
+      return 'History cleared. Fresh start!';
+    }
+
+    // time
+    if (any('time','clock') && !text.includes('weather')) {
+      return 'It\'s ' + new Date().toLocaleString();
+    }
+
+    // joke
+    if (any('joke','funny')) {
+      return one([
+        'Why do programmers hate nature? It has too many bugs.',
+        'I told my computer I needed a break, and it said “No problem — I\'ll go to sleep.”',
+        'Debugging: being the detective in a crime movie where you\'re also the murderer.'
+      ]);
+    }
+
+    // weather demo (no API calls; canned reply)
+    if (includes('weather','in')) {
+      const city = (raw.match(/in\s+([a-zA-Z\s]+)$/i)?.[1] || 'your city').trim();
+      return `Here\'s a pretend forecast for ${city}: 72°F, clear skies, gentle breeze. (Demo only)`;
+    }
+
+    // echo
+    if (text.startsWith('echo ')) {
+      return raw.slice(5);
+    }
+
+    // small talk
+    if (any('how are you','how r u','hru','how are u')) {
+      return one(['Doing great! Ready to help.','All systems go! What\'s up?']);
+    }
+
+    // fallback
+    return one([
+      "I'm a simple rule-based bot. Try 'help' for ideas!",
+      "Didn't quite catch that. Type 'help' to see commands.",
+      "I only know a few tricks — ask for 'time', 'joke', or 'weather in <city>'."
+    ]);
+  }
+
+  function one(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+})();
+</script>
+</body>
+</html>
