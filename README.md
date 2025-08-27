@@ -1,4 +1,4 @@
-# Simple Chatbot 🤖
+# Simple Chatbot 
 
 A tiny rule-based chatbot built with **HTML, CSS, and JavaScript**.  
 Just open it in your browser and start chatting!
